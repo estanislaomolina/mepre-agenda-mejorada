@@ -4,6 +4,7 @@
   const TOOLBAR_ID = 'mepre-agenda-mejorada-toolbar';
   const PANEL_ID = 'mepre-agenda-mejorada-panel';
   const BRIDGE_DATA_ID = 'mepre-agenda-bridge-data';
+  const VIEW_HINT_ID = 'mepre-agenda-mejorada-view-hint';
 
   const formatterDay = new Intl.DateTimeFormat('es-AR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric'
@@ -113,10 +114,111 @@
     return '';
   }
 
-  function extractRenderedCalendar() {
+  function ymd(d) {
+    if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function currentViewName(calendar = document.getElementById('calendar')) {
+    if (!calendar) return '';
+    const view = calendar.querySelector('.fc-view');
+    if (view?.classList.contains('fc-view-agendaWeek')) return 'agendaWeek';
+    if (view?.classList.contains('fc-view-month')) return 'month';
+    if (calendar.querySelector('.fc-button-agendaWeek.fc-state-active')) return 'agendaWeek';
+    if (calendar.querySelector('.fc-button-month.fc-state-active')) return 'month';
+    return '';
+  }
+
+  function viewLabel(name) {
+    return name === 'agendaWeek' ? 'Semana' : name === 'month' ? 'Mes' : 'Vista actual';
+  }
+
+  function weekHeaderDates(calendar, viewInfo) {
+    const headers = [...calendar.querySelectorAll('.fc-view-agendaWeek th.fc-day-header, .fc-agenda-days th.fc-day-header')]
+      .filter((el, i, arr) => arr.indexOf(el) === i);
+    if (!headers.length) return {headers: [], dates: []};
+
+    const base = parseLocal(viewInfo?.visStart || viewInfo?.start || '');
+    if (!base) return {headers, dates: []};
+    base.setHours(0,0,0,0);
+
+    const dowClasses = [
+      ['fc-sun',0], ['fc-mon',1], ['fc-tue',2], ['fc-wed',3],
+      ['fc-thu',4], ['fc-fri',5], ['fc-sat',6]
+    ];
+    const dates = [];
+    let cursor = new Date(base);
+
+    for (const header of headers) {
+      const found = dowClasses.find(([cls]) => header.classList.contains(cls));
+      const targetDow = found ? found[1] : null;
+      let candidate = new Date(cursor);
+      if (targetDow != null) {
+        let guard = 0;
+        while (candidate.getDay() !== targetDow && guard++ < 8) candidate.setDate(candidate.getDate() + 1);
+      }
+      dates.push(ymd(candidate));
+      cursor = new Date(candidate);
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return {headers, dates};
+  }
+
+  function findDateByWeekLayout(eventEl, calendar, viewInfo) {
+    const {headers, dates} = weekHeaderDates(calendar, viewInfo);
+    if (!headers.length || !dates.length) return '';
+
+    const er = visibleRect(eventEl);
+    if (er) {
+      const x = er.left + er.width / 2;
+      let bestIndex = -1;
+      let bestDistance = Infinity;
+      headers.forEach((header, i) => {
+        const r = visibleRect(header);
+        if (!r) return;
+        if (x >= r.left - 2 && x <= r.right + 2) {
+          bestIndex = i;
+          bestDistance = 0;
+          return;
+        }
+        const distance = Math.abs(x - (r.left + r.width / 2));
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          bestIndex = i;
+        }
+      });
+      if (bestIndex >= 0 && dates[bestIndex]) return dates[bestIndex];
+    }
+
+    // Respaldo cuando getBoundingClientRect no resulta útil: comparar el centro
+    // horizontal del evento con el de las columnas de día usando estilos/anchos.
+    const left = parsePx(eventEl.style.left || getComputedStyle(eventEl).left);
+    if (left != null) {
+      const eventWidth = parsePx(eventEl.style.width || getComputedStyle(eventEl).width) || 1;
+      const eventCenter = left + eventWidth / 2;
+      const widths = headers.map(h => parsePx(h.style.width) || visibleRect(h)?.width || 0);
+      if (widths.some(Boolean)) {
+        let cursor = 0;
+        let best = 0;
+        let bestDist = Infinity;
+        widths.forEach((w, i) => {
+          if (!w) return;
+          const center = cursor + w / 2;
+          const dist = Math.abs(eventCenter - center);
+          if (dist < bestDist) { bestDist = dist; best = i; }
+          cursor += w;
+        });
+        return dates[best] || '';
+      }
+    }
+    return '';
+  }
+
+  function extractRenderedCalendar(viewInfo = null) {
     const calendar = document.getElementById('calendar');
     if (!calendar) return [];
 
+    const activeView = viewInfo?.name || currentViewName(calendar);
     const dayCells = [...calendar.querySelectorAll('td.fc-day[data-date]')];
     const eventEls = [...calendar.querySelectorAll('.fc-event')];
     const events = [];
@@ -130,8 +232,17 @@
       const timeMatch = timeText.match(/(\d{1,2}):(\d{2})/);
       const time = timeMatch ? `${String(+timeMatch[1]).padStart(2, '0')}:${timeMatch[2]}` : '00:00';
 
-      let date = findDateByGeometry(el, dayCells);
+      let date = '';
+      if (activeView === 'agendaWeek') {
+        date = findDateByWeekLayout(el, calendar, viewInfo);
+      } else {
+        date = findDateByGeometry(el, dayCells);
+        if (!date) date = findDateByOldMonthLayout(el, calendar);
+      }
+      // Si FullCalendar no expuso el nombre de la vista, probamos ambos métodos.
+      if (!date) date = findDateByGeometry(el, dayCells);
       if (!date) date = findDateByOldMonthLayout(el, calendar);
+      if (!date) date = findDateByWeekLayout(el, calendar, viewInfo);
       if (!date) continue;
 
       const idFromUrl = /[?&]mepre=(\d+)/i.exec(href)?.[1] || '';
@@ -180,6 +291,16 @@
     return out.sort((a, b) => String(a.start).localeCompare(String(b.start)));
   }
 
+  function filterToCurrentView(events, viewInfo) {
+    const start = parseLocal(viewInfo?.visStart || viewInfo?.start || '');
+    const end = parseLocal(viewInfo?.visEnd || viewInfo?.end || '');
+    if (!start || !end || end <= start) return events || [];
+    return (events || []).filter(ev => {
+      const d = parseLocal(ev.start);
+      return d && d >= start && d < end;
+    });
+  }
+
   function requestEvents(timeout = 900) {
     return new Promise(resolve => {
       let finished = false;
@@ -191,11 +312,13 @@
         // El DOM visible es el respaldo principal porque MEPRE usa una versión antigua
         // de FullCalendar y, según cómo se cargue la página, clientEvents puede no exponer
         // fechas a una extensión de Chrome.
-        const domEvents = extractRenderedCalendar();
+        const view = bridgePayload?.view || {name: currentViewName()};
+        const domEvents = extractRenderedCalendar(view);
         const bridgeEvents = bridgePayload?.events || [];
-        const events = unique([...bridgeEvents, ...domEvents]);
+        const events = unique(filterToCurrentView([...bridgeEvents, ...domEvents], view));
         resolve({
           events,
+          view,
           title: bridgePayload?.title || document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
           generatedAt: new Date().toISOString()
         });
@@ -242,7 +365,8 @@
 
     const heading = document.createElement('div');
     heading.className = 'mepre-panel-heading';
-    heading.innerHTML = `<div><h2>Agenda mejorada</h2><p>${escapeHtml(payload.title || '')} · ${payload.events.length} evento${payload.events.length === 1 ? '' : 's'}</p></div><button type="button" class="mepre-close" aria-label="Cerrar">×</button>`;
+    const activeLabel = viewLabel(payload.view?.name || currentViewName());
+    heading.innerHTML = `<div><h2>Agenda mejorada</h2><p>${escapeHtml(payload.title || '')} · ${escapeHtml(activeLabel)} · ${payload.events.length} evento${payload.events.length === 1 ? '' : 's'}</p></div><button type="button" class="mepre-close" aria-label="Cerrar">×</button>`;
     heading.querySelector('.mepre-close').addEventListener('click', () => panel.remove());
     panel.appendChild(heading);
 
@@ -250,7 +374,7 @@
     if (!groups.length) {
       const empty = document.createElement('div');
       empty.className = 'mepre-empty';
-      empty.textContent = 'No pude asociar los eventos con sus fechas. Cerrá esta vista, dejá el calendario en “Mes” y volvé a pulsar “Ver lista”.';
+      empty.textContent = 'No pude asociar los eventos con sus fechas. Cerrá esta vista, dejá MEPRE en “Mes” o “Semana” y volvé a pulsar “Ver lista”.';
       panel.appendChild(empty);
     } else {
       for (const [, events] of groups) {
@@ -350,7 +474,7 @@
   }
 
   function downloadICS(payload) {
-    if (!payload.events.length) return alert('No encontré eventos para exportar. Dejá el calendario en vista “Mes” e intentá nuevamente.');
+    if (!payload.events.length) return alert('No encontré eventos para exportar en la vista actual. Probá con “Mes” o “Semana” e intentá nuevamente.');
     const data = makeICS(payload.events);
     const blob = new Blob([data], {type: 'text/calendar;charset=utf-8'});
     const a = document.createElement('a');
@@ -364,9 +488,9 @@
   }
 
   function printAgenda(payload) {
-    if (!payload.events.length) return alert('No encontré eventos para imprimir. Dejá el calendario en vista “Mes” e intentá nuevamente.');
+    if (!payload.events.length) return alert('No encontré eventos para imprimir en la vista actual. Probá con “Mes” o “Semana” e intentá nuevamente.');
     const groups = groupEvents(payload.events);
-    if (!groups.length) return alert('Encontré eventos, pero no pude leer sus fechas. Dejá el calendario en vista “Mes” e intentá nuevamente.');
+    if (!groups.length) return alert('Encontré eventos, pero no pude leer sus fechas. Probá con “Mes” o “Semana” e intentá nuevamente.');
 
     const rows = groups.map(([, events]) => {
       const d = parseLocal(events[0].start);
@@ -393,9 +517,10 @@
     const w = frame.contentWindow;
     const doc = frame.contentDocument || w.document;
     doc.open();
+    const activeLabel = viewLabel(payload.view?.name || currentViewName());
     doc.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Agenda MEPRE</title><style>
       @page{size:A4;margin:12mm} body{font-family:Arial,sans-serif;color:#111;margin:0} header{border-bottom:2px solid #222;margin-bottom:14px;padding-bottom:8px} h1{font-size:20px;margin:0 0 3px} header p{margin:0;color:#555;font-size:12px} section{break-inside:avoid;margin:0 0 16px} h2{font-size:15px;margin:0 0 5px;background:#eee;padding:6px 8px} table{border-collapse:collapse;width:100%;font-size:12px} th,td{border:1px solid #bbb;padding:7px 8px;text-align:left;vertical-align:top} th{background:#f5f5f5}.time{width:55px;font-weight:bold}.notes{width:32%;height:28px} footer{font-size:9px;color:#777;margin-top:12px}
-    </style></head><body><header><h1>Agenda MEPRE</h1><p>${escapeHtml(payload.title || '')} · ${payload.events.length} eventos</p></header>${rows}<footer>Generado desde MEPRE Agenda Mejorada · ${new Date().toLocaleString('es-AR')}</footer></body></html>`);
+    </style></head><body><header><h1>Agenda MEPRE</h1><p>${escapeHtml(payload.title || '')} · ${escapeHtml(activeLabel)} · ${payload.events.length} eventos</p></header>${rows}<footer>Generado desde MEPRE Agenda Mejorada · ${new Date().toLocaleString('es-AR')}</footer></body></html>`);
     doc.close();
 
     const cleanup = () => setTimeout(() => frame.remove(), 500);
@@ -437,8 +562,19 @@
     return b;
   }
 
+  function updateToolbarView() {
+    const hint = document.getElementById(VIEW_HINT_ID);
+    if (!hint) return;
+    const name = currentViewName();
+    hint.textContent = `Vista actual: ${viewLabel(name)}`;
+  }
+
   function installToolbar() {
-    if (document.getElementById(TOOLBAR_ID)) return;
+    const existing = document.getElementById(TOOLBAR_ID);
+    if (existing) {
+      updateToolbarView();
+      return;
+    }
     const calendar = document.getElementById('calendar');
     if (!calendar) return;
 
@@ -447,11 +583,18 @@
     const label = document.createElement('strong');
     label.textContent = 'Agenda mejorada';
     toolbar.appendChild(label);
+
+    const hint = document.createElement('span');
+    hint.id = VIEW_HINT_ID;
+    hint.className = 'mepre-view-hint';
+    toolbar.appendChild(hint);
+
     toolbar.appendChild(makeButton('Ver lista', buildAgenda, true));
     toolbar.appendChild(makeButton('Imprimir A4', printAgenda));
     toolbar.appendChild(makeButton('Exportar .ics', downloadICS));
 
     calendar.parentNode.insertBefore(toolbar, calendar);
+    updateToolbarView();
   }
 
   installToolbar();
@@ -461,6 +604,6 @@
 
   document.addEventListener('click', e => {
     const el = e.target.closest?.('#lbVerAGenda, .mostrarAgenda, .fc-button-prev, .fc-button-next, .fc-button-today, .fc-button-month, .fc-button-agendaWeek');
-    if (el) setTimeout(installToolbar, 500);
+    if (el) setTimeout(installToolbar, 650);
   }, true);
 })();

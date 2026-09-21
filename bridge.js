@@ -29,20 +29,42 @@
     }
   }
 
+  function extractView($calendar) {
+    let view = null;
+    try { view = $calendar.fullCalendar('getView'); } catch (_) {}
+
+    let name = view?.name || '';
+    if (!name) {
+      const node = document.querySelector('#calendar .fc-view');
+      if (node?.classList.contains('fc-view-agendaWeek')) name = 'agendaWeek';
+      else if (node?.classList.contains('fc-view-month')) name = 'month';
+    }
+
+    return {
+      name,
+      title: view?.title || document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
+      start: iso(view?.start),
+      end: iso(view?.end),
+      visStart: iso(view?.visStart || view?.start),
+      visEnd: iso(view?.visEnd || view?.end)
+    };
+  }
+
   function extractViaFullCalendar() {
-    if (!window.jQuery) return [];
+    if (!window.jQuery) return {events: [], view: null};
     const $ = window.jQuery;
     const $calendar = $('#calendar');
-    if (!$calendar.length || typeof $calendar.fullCalendar !== 'function') return [];
+    if (!$calendar.length || typeof $calendar.fullCalendar !== 'function') return {events: [], view: null};
 
+    const view = extractView($calendar);
     let source = [];
     try {
       source = $calendar.fullCalendar('clientEvents') || [];
     } catch (_) {
-      return [];
+      return {events: [], view};
     }
 
-    return source.map((ev, index) => {
+    const events = source.map((ev, index) => {
       const title = cleanText(ev.title);
       const href = ev.url || '';
       const idFromUrl = /[?&]mepre=(\d+)/i.exec(href)?.[1] || '';
@@ -61,6 +83,8 @@
         source: 'fullcalendar'
       };
     }).filter(ev => ev.start);
+
+    return {events, view};
   }
 
   function writePayload(payload) {
@@ -75,11 +99,12 @@
   }
 
   window.addEventListener('mepre-agenda-request', () => {
-    let events = [];
-    try { events = extractViaFullCalendar(); } catch (_) { events = []; }
+    let extracted = {events: [], view: null};
+    try { extracted = extractViaFullCalendar(); } catch (_) {}
     writePayload({
-      events,
-      title: document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
+      events: extracted.events || [],
+      view: extracted.view || null,
+      title: extracted.view?.title || document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
       generatedAt: new Date().toISOString()
     });
     window.dispatchEvent(new CustomEvent('mepre-agenda-response'));

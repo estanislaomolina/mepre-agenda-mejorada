@@ -4,9 +4,9 @@ MEPRE Agenda Mejorada
 Qué hace
 --------
 - Agrega una barra arriba del calendario de MEPRE.
-- "Ver lista": muestra la agenda en formato grande y ordenado por día/hora.
-- "Imprimir A4": abre directamente el cuadro de impresión con una versión limpia, sin usar ventanas emergentes, y con columna para anotaciones.
-- "Exportar .ics": descarga los eventos visibles/cargados por MEPRE para importarlos en Google Calendar.
+- "Ver lista": muestra la agenda en formato grande y ordenado por día/hora. Funciona tanto en vista Mes como en vista Semana y toma automáticamente la vista actual.
+- "Imprimir A4": imprime exactamente la vista actual (Mes o Semana) en una versión limpia, sin ventanas emergentes, y con columna para anotaciones.
+- "Exportar .ics": descarga los eventos de la vista actual (Mes o Semana) para importarlos en Google Calendar.
 - Todo funciona localmente en el navegador; la extensión no envía los datos a ningún servidor.
 
 Instalación en Chrome
@@ -39,3 +39,11 @@ VERSIÓN 1.1.0
 - Ya no depende únicamente de clientEvents de FullCalendar: reconstruye fecha y hora a partir del calendario visible.
 - La comunicación entre la página y la extensión usa JSON en el DOM para evitar problemas entre contextos aislados de Chrome.
 - Mantiene impresión sin pop-ups y exportación ICS en horario de Buenos Aires.
+
+
+VERSIÓN 1.2.0
+- Agrega soporte automático para la vista “Semana” de MEPRE.
+- Los botones Ver lista, Imprimir A4 y Exportar .ics trabajan sobre la vista actualmente seleccionada.
+- La barra indica “Vista actual: Mes” o “Vista actual: Semana”.
+- En la vista semanal, la fecha se reconstruye usando las columnas de FullCalendar y el rango visible de la semana.
+- Mantiene el soporte de la vista mensual de la versión 1.1.0.

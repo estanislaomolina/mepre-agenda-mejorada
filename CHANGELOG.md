@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.2.0
+
+- Added support for MEPRE weekly calendar view.
+- Added automatic detection between monthly and weekly views.
+- Reused agenda list, A4 printing and ICS export for the active calendar view.
+
 ## v1.1.0
 
 - Improved event date extraction in monthly calendar view.
