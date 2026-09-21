@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.1.0
+
+- Improved event date extraction in monthly calendar view.
+- Fixed events appearing without an associated date.
+- Improved compatibility with MEPRE's FullCalendar rendering.
+
 ## v1.0.1
 
 - Fixed A4 printing when browser pop-ups are blocked.

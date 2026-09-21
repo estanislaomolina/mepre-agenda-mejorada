@@ -62,3 +62,4 @@ a.mepre-event-row:hover { background:#fafafa; }
 @media print {
   #mepre-agenda-mejorada-toolbar, #mepre-agenda-mejorada-panel { display:none !important; }
 }
+.mepre-status-desistida .mepre-event-title { border-left-color:#D64705; }
