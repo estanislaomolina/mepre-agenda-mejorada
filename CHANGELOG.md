@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.2
+
+- Fixed event-to-date association in weekly calendar view.
+- Improved weekly date detection using the visible date range and event columns.
+- Preserved event start/end times for weekly ICS export.
+- Stabilized monthly and weekly agenda handling.
+
+
 ## v1.2.1
 
 - Improved extension performance on MEPRE.

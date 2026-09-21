@@ -133,74 +133,256 @@
     return name === 'agendaWeek' ? 'Semana' : name === 'month' ? 'Mes' : 'Vista actual';
   }
 
-  function weekHeaderDates(calendar, viewInfo) {
-    const headers = [...calendar.querySelectorAll('.fc-view-agendaWeek th.fc-day-header, .fc-agenda-days th.fc-day-header')]
-      .filter((el, i, arr) => arr.indexOf(el) === i);
-    if (!headers.length) return {headers: [], dates: []};
+  const ES_MONTHS = {
+    ene: 1, enero: 1,
+    feb: 2, febrero: 2,
+    mar: 3, marzo: 3,
+    abr: 4, abril: 4,
+    may: 5, mayo: 5,
+    jun: 6, junio: 6,
+    jul: 7, julio: 7,
+    ago: 8, agosto: 8,
+    sep: 9, sept: 9, septiembre: 9,
+    oct: 10, octubre: 10,
+    nov: 11, noviembre: 11,
+    dic: 12, diciembre: 12
+  };
 
-    const base = parseLocal(viewInfo?.visStart || viewInfo?.start || '');
-    if (!base) return {headers, dates: []};
-    base.setHours(0,0,0,0);
+  function normalizedSpanish(value) {
+    return String(value || '')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/\./g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function monthNumber(token) {
+    const key = normalizedSpanish(token).replace(/[^a-z]/g, '');
+    return ES_MONTHS[key] || ES_MONTHS[key.slice(0, 3)] || null;
+  }
+
+  function daysBetweenInclusive(start, end, max = 14) {
+    const out = [];
+    if (!(start instanceof Date) || !(end instanceof Date)) return out;
+    const d = new Date(start);
+    d.setHours(0,0,0,0);
+    const limit = new Date(end);
+    limit.setHours(0,0,0,0);
+    let guard = 0;
+    while (d <= limit && guard++ < max) {
+      out.push(ymd(d));
+      d.setDate(d.getDate() + 1);
+    }
+    return out;
+  }
+
+  // FullCalendar 1.x (el que usa MEPRE) muestra títulos como
+  // "14 - 18 de sep. del 2026". Esta función reconstruye el rango sin depender
+  // de propiedades internas de FullCalendar.
+  function parseWeekTitleDates(title) {
+    const raw = normalizedSpanish(title).replace(/[–—]/g, '-');
+    let m;
+
+    // Misma semana dentro del mismo mes: 14 - 18 de sep del 2026
+    m = raw.match(/(\d{1,2})\s*-\s*(\d{1,2})\s+de\s+([a-z]+)\s+(?:de|del)\s+(\d{4})/);
+    if (m) {
+      const month = monthNumber(m[3]);
+      if (month) {
+        return daysBetweenInclusive(
+          new Date(+m[4], month - 1, +m[1]),
+          new Date(+m[4], month - 1, +m[2])
+        );
+      }
+    }
+
+    // Cruce de mes: 28 de sep - 2 de oct del 2026
+    m = raw.match(/(\d{1,2})\s+de\s+([a-z]+)\s*-\s*(\d{1,2})\s+de\s+([a-z]+)\s+(?:de|del)\s+(\d{4})/);
+    if (m) {
+      const m1 = monthNumber(m[2]);
+      const m2 = monthNumber(m[4]);
+      if (m1 && m2) {
+        let y1 = +m[5], y2 = +m[5];
+        if (m2 < m1) y2 += 1;
+        return daysBetweenInclusive(
+          new Date(y1, m1 - 1, +m[1]),
+          new Date(y2, m2 - 1, +m[3])
+        );
+      }
+    }
+
+    // Formato alternativo: 28 sep - 2 oct 2026
+    m = raw.match(/(\d{1,2})\s+([a-z]+)\s*-\s*(\d{1,2})\s+([a-z]+)\s+(\d{4})/);
+    if (m) {
+      const m1 = monthNumber(m[2]);
+      const m2 = monthNumber(m[4]);
+      if (m1 && m2) {
+        let y1 = +m[5], y2 = +m[5];
+        if (m2 < m1) y2 += 1;
+        return daysBetweenInclusive(
+          new Date(y1, m1 - 1, +m[1]),
+          new Date(y2, m2 - 1, +m[3])
+        );
+      }
+    }
+    return [];
+  }
+
+  function parseWeekHeaderDate(text, yearHint) {
+    const raw = normalizedSpanish(text);
+    let m = raw.match(/(\d{1,2})\s*[\/\-]\s*(\d{1,2})(?:\s*[\/\-]\s*(\d{2,4}))?/);
+    if (m) {
+      let year = +(m[3] || yearHint || 0);
+      if (year && year < 100) year += 2000;
+      if (year) return ymd(new Date(year, +m[2] - 1, +m[1]));
+    }
+    m = raw.match(/(\d{1,2})\s+(?:de\s+)?([a-z]+)/);
+    if (m) {
+      const month = monthNumber(m[2]);
+      if (month && yearHint) return ymd(new Date(+yearHint, month - 1, +m[1]));
+    }
+    return '';
+  }
+
+  function weekHeaderDates(calendar, viewInfo) {
+    const agendaView = calendar.querySelector('.fc-view-agendaWeek, .fc-agenda') || calendar;
+    let headers = [...agendaView.querySelectorAll('th.fc-day-header')];
+
+    // Algunas compilaciones antiguas no usan fc-day-header en agendaWeek.
+    if (!headers.length) {
+      headers = [...agendaView.querySelectorAll('.fc-agenda-days thead th')]
+        .filter(el => !el.classList.contains('fc-agenda-axis') && !el.classList.contains('fc-agenda-gutter'));
+    }
+    headers = headers.filter((el, i, arr) => arr.indexOf(el) === i && visibleRect(el));
+
+    const title = viewInfo?.title || document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || '';
+    const yearHint = +(String(title).match(/\b(20\d{2})\b/)?.[1] || 0);
+    const titleDates = parseWeekTitleDates(title);
+
+    // Si FullCalendar expone el inicio de la vista, también lo usamos como respaldo.
+    let base = parseLocal(viewInfo?.visStart || viewInfo?.start || '');
+    if (base) base.setHours(0,0,0,0);
 
     const dowClasses = [
       ['fc-sun',0], ['fc-mon',1], ['fc-tue',2], ['fc-wed',3],
       ['fc-thu',4], ['fc-fri',5], ['fc-sat',6]
     ];
-    const dates = [];
-    let cursor = new Date(base);
 
-    for (const header of headers) {
+    const dates = headers.map((header, i) => {
+      // La cabecera semanal normalmente contiene "lun. 14/9".
+      const explicit = parseWeekHeaderDate(header.textContent, yearHint || base?.getFullYear());
+      if (explicit) return explicit;
+
       const found = dowClasses.find(([cls]) => header.classList.contains(cls));
       const targetDow = found ? found[1] : null;
-      let candidate = new Date(cursor);
-      if (targetDow != null) {
-        let guard = 0;
-        while (candidate.getDay() !== targetDow && guard++ < 8) candidate.setDate(candidate.getDate() + 1);
+
+      // El título es nuestro respaldo más estable para MEPRE.
+      if (titleDates.length) {
+        if (targetDow != null) {
+          const byDow = titleDates.find(ds => parseLocal(ds)?.getDay() === targetDow);
+          if (byDow) return byDow;
+        }
+        if (titleDates[i]) return titleDates[i];
       }
-      dates.push(ymd(candidate));
-      cursor = new Date(candidate);
-      cursor.setDate(cursor.getDate() + 1);
+
+      if (base) {
+        const candidate = new Date(base);
+        if (targetDow != null) {
+          let guard = 0;
+          while (candidate.getDay() !== targetDow && guard++ < 8) candidate.setDate(candidate.getDate() + 1);
+          return ymd(candidate);
+        }
+        candidate.setDate(candidate.getDate() + i);
+        return ymd(candidate);
+      }
+      return '';
+    });
+
+    // En caso extremo, aunque no podamos localizar las cabeceras, devolvemos el
+    // rango derivado del título para que la geometría por columnas pueda usarlo.
+    return {headers, dates, titleDates};
+  }
+
+  function weekDayColumns(calendar) {
+    const agendaView = calendar.querySelector('.fc-view-agendaWeek, .fc-agenda') || calendar;
+    let cols = [...agendaView.querySelectorAll('.fc-agenda-days tbody td[class*="fc-col"]')];
+    if (!cols.length) {
+      cols = [...agendaView.querySelectorAll('.fc-agenda-days tbody td.fc-widget-content')]
+        .filter(el => !el.classList.contains('fc-agenda-axis') && !el.classList.contains('fc-agenda-gutter'));
     }
-    return {headers, dates};
+    return cols.filter((el, i, arr) => arr.indexOf(el) === i && visibleRect(el));
   }
 
   function findDateByWeekLayout(eventEl, calendar, viewInfo) {
-    const {headers, dates} = weekHeaderDates(calendar, viewInfo);
-    if (!headers.length || !dates.length) return '';
+    const {headers, dates, titleDates} = weekHeaderDates(calendar, viewInfo);
+    const usableDates = dates.some(Boolean) ? dates : titleDates;
+    if (!usableDates.length) return '';
+
+    // En varias versiones 1.x el evento vive dentro de un contenedor fc-colN.
+    let p = eventEl;
+    while (p && p !== calendar) {
+      const match = [...p.classList].join(' ').match(/(?:^|\s)fc-col(\d+)(?:\s|$)/);
+      if (match) {
+        const idx = +match[1];
+        if (usableDates[idx]) return usableDates[idx];
+      }
+      p = p.parentElement;
+    }
 
     const er = visibleRect(eventEl);
     if (er) {
       const x = er.left + er.width / 2;
-      let bestIndex = -1;
-      let bestDistance = Infinity;
-      headers.forEach((header, i) => {
-        const r = visibleRect(header);
-        if (!r) return;
-        if (x >= r.left - 2 && x <= r.right + 2) {
-          bestIndex = i;
-          bestDistance = 0;
-          return;
-        }
-        const distance = Math.abs(x - (r.left + r.width / 2));
-        if (distance < bestDistance) {
-          bestDistance = distance;
-          bestIndex = i;
-        }
-      });
-      if (bestIndex >= 0 && dates[bestIndex]) return dates[bestIndex];
+
+      // Preferimos las cabeceras: comparten exactamente los límites X de cada día.
+      if (headers.length) {
+        let bestIndex = -1;
+        let bestDistance = Infinity;
+        headers.forEach((header, i) => {
+          const r = visibleRect(header);
+          if (!r) return;
+          if (x >= r.left - 3 && x <= r.right + 3) {
+            bestIndex = i;
+            bestDistance = 0;
+            return;
+          }
+          const distance = Math.abs(x - (r.left + r.width / 2));
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+          }
+        });
+        if (bestIndex >= 0 && usableDates[bestIndex]) return usableDates[bestIndex];
+      }
+
+      // Respaldo: usar las columnas del cuerpo de agendaWeek.
+      const cols = weekDayColumns(calendar);
+      if (cols.length) {
+        let bestIndex = -1;
+        let bestDistance = Infinity;
+        cols.forEach((col, i) => {
+          const r = visibleRect(col);
+          if (!r) return;
+          if (x >= r.left - 3 && x <= r.right + 3) {
+            bestIndex = i;
+            bestDistance = 0;
+            return;
+          }
+          const distance = Math.abs(x - (r.left + r.width / 2));
+          if (distance < bestDistance) { bestDistance = distance; bestIndex = i; }
+        });
+        if (bestIndex >= 0 && usableDates[bestIndex]) return usableDates[bestIndex];
+      }
     }
 
-    // Respaldo cuando getBoundingClientRect no resulta útil: comparar el centro
-    // horizontal del evento con el de las columnas de día usando estilos/anchos.
+    // Último respaldo: estilos left/width relativos al área de los días.
     const left = parsePx(eventEl.style.left || getComputedStyle(eventEl).left);
-    if (left != null) {
+    if (left != null && headers.length) {
       const eventWidth = parsePx(eventEl.style.width || getComputedStyle(eventEl).width) || 1;
       const eventCenter = left + eventWidth / 2;
       const widths = headers.map(h => parsePx(h.style.width) || visibleRect(h)?.width || 0);
       if (widths.some(Boolean)) {
-        let cursor = 0;
-        let best = 0;
-        let bestDist = Infinity;
+        let cursor = 0, best = 0, bestDist = Infinity;
         widths.forEach((w, i) => {
           if (!w) return;
           const center = cursor + w / 2;
@@ -208,7 +390,7 @@
           if (dist < bestDist) { bestDist = dist; best = i; }
           cursor += w;
         });
-        return dates[best] || '';
+        return usableDates[best] || '';
       }
     }
     return '';
@@ -230,7 +412,9 @@
       const title = cleanText(titleNode ? titleNode.innerHTML : el.textContent);
       const timeText = (el.querySelector('.fc-event-time')?.textContent || '').trim();
       const timeMatch = timeText.match(/(\d{1,2}):(\d{2})/);
+      const rangeMatch = timeText.match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
       const time = timeMatch ? `${String(+timeMatch[1]).padStart(2, '0')}:${timeMatch[2]}` : '00:00';
+      const endTime = rangeMatch ? `${String(+rangeMatch[3]).padStart(2, '0')}:${rangeMatch[4]}` : '';
 
       let date = '';
       if (activeView === 'agendaWeek') {
@@ -255,7 +439,7 @@
         mepreNumber: displayed,
         title,
         start: `${date}T${time}:00`,
-        end: null,
+        end: endTime ? `${date}T${endTime}:00` : null,
         allDay: !timeMatch,
         url: href,
         backgroundColor: bg,
