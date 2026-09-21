@@ -98,6 +98,18 @@
     node.textContent = JSON.stringify(payload);
   }
 
+  // MEPRE usa ASP.NET AJAX. Escuchamos su evento oficial de fin de actualización
+  // en vez de vigilar todas las mutaciones del documento. Esto mantiene la extensión
+  // prácticamente inactiva mientras el usuario trabaja.
+  try {
+    const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance?.();
+    if (prm?.add_endRequest) {
+      prm.add_endRequest(() => {
+        window.dispatchEvent(new CustomEvent('mepre-agenda-page-updated'));
+      });
+    }
+  } catch (_) {}
+
   window.addEventListener('mepre-agenda-request', () => {
     let extracted = {events: [], view: null};
     try { extracted = extractViaFullCalendar(); } catch (_) {}

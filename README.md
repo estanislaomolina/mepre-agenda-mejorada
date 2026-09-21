@@ -41,9 +41,15 @@ VERSIÓN 1.1.0
 - Mantiene impresión sin pop-ups y exportación ICS en horario de Buenos Aires.
 
 
-VERSIÓN 1.2.0
+VERSIÓN 1.2.1
 - Agrega soporte automático para la vista “Semana” de MEPRE.
 - Los botones Ver lista, Imprimir A4 y Exportar .ics trabajan sobre la vista actualmente seleccionada.
 - La barra indica “Vista actual: Mes” o “Vista actual: Semana”.
 - En la vista semanal, la fecha se reconstruye usando las columnas de FullCalendar y el rango visible de la semana.
 - Mantiene el soporte de la vista mensual de la versión 1.1.0.
+
+
+VERSIÓN 1.2.1
+- Mejora de rendimiento: se eliminó el observador global del DOM.
+- La extensión ahora sólo reacciona al calendario, a sus botones y a las actualizaciones parciales de ASP.NET.
+- Mantiene Mes, Semana, impresión A4 y exportación ICS.

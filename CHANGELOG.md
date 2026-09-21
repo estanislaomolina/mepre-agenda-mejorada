@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.1
+
+- Improved extension performance on MEPRE.
+- Reduced unnecessary DOM observation.
+- Avoided continuously reacting to unrelated page changes.
+- Kept calendar features inactive until needed.
+
+
 ## v1.2.0
 
 - Added support for MEPRE weekly calendar view.

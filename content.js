@@ -599,11 +599,21 @@
 
   installToolbar();
 
-  const observer = new MutationObserver(() => installToolbar());
-  observer.observe(document.documentElement, {childList:true, subtree:true});
+  // No observamos todo el DOM: MEPRE/ASP.NET realiza muchas mutaciones y un
+  // MutationObserver global puede volver lenta la página. El bridge nos avisa
+  // únicamente después de una actualización parcial de ASP.NET.
+  window.addEventListener('mepre-agenda-page-updated', () => {
+    setTimeout(installToolbar, 80);
+  });
 
   document.addEventListener('click', e => {
     const el = e.target.closest?.('#lbVerAGenda, .mostrarAgenda, .fc-button-prev, .fc-button-next, .fc-button-today, .fc-button-month, .fc-button-agendaWeek');
-    if (el) setTimeout(installToolbar, 650);
+    if (!el) return;
+    // FullCalendar actualiza su vista de forma síncrona/rápida. Sólo refrescamos
+    // la etiqueta y reinstalamos la barra si MEPRE la hubiera reemplazado.
+    setTimeout(() => {
+      installToolbar();
+      updateToolbarView();
+    }, 120);
   }, true);
 })();
