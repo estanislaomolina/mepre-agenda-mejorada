@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "MEPRE Agenda Mejorada",
+  "version": "1.0.0",
+  "description": "Vista clara, impresión A4 y exportación .ics para la agenda de MEPRE.",
+  "permissions": [],
+  "host_permissions": [
+    "https://www2.jus.gov.ar/mepre/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": ["https://www2.jus.gov.ar/mepre/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://www2.jus.gov.ar/mepre/*"],
+      "css": ["styles.css"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "MEPRE Agenda Mejorada"
+  }
+}

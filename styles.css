@@ -1,0 +1,64 @@
+#mepre-agenda-mejorada-toolbar {
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  margin: 8px 0 10px;
+  border: 1px solid #cfd8dc;
+  border-radius: 7px;
+  background: #f7f9fa;
+  color: #263238;
+  font: 14px Arial, sans-serif;
+}
+#mepre-agenda-mejorada-toolbar strong { margin-right: 4px; }
+.mepre-tool-button {
+  appearance: none;
+  border: 1px solid #607d8b;
+  border-radius: 5px;
+  padding: 7px 11px;
+  background: #fff;
+  color: #263238;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mepre-tool-button:hover { background: #eceff1; }
+.mepre-tool-button.primary { background: #263238; color: #fff; border-color: #263238; }
+.mepre-tool-button:disabled { opacity: .55; cursor: wait; }
+
+#mepre-agenda-mejorada-panel {
+  box-sizing: border-box;
+  position: relative;
+  z-index: 20;
+  width: calc(100% - 20px);
+  max-width: 980px;
+  max-height: 78vh;
+  overflow: auto;
+  margin: 14px 10px;
+  padding: 18px;
+  border: 1px solid #b0bec5;
+  border-radius: 8px;
+  background: #fff;
+  color: #263238;
+  box-shadow: 0 4px 18px rgba(0,0,0,.14);
+  font: 14px Arial, sans-serif;
+}
+.mepre-panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; border-bottom:1px solid #ddd; padding-bottom:10px; margin-bottom:10px; }
+.mepre-panel-heading h2 { margin:0 0 3px; font-size:21px; }
+.mepre-panel-heading p { margin:0; color:#607d8b; }
+.mepre-close { border:0; background:transparent; font-size:30px; line-height:1; cursor:pointer; color:#455a64; }
+.mepre-day { margin: 0 0 14px; }
+.mepre-day h3 { margin:0; padding:8px 10px; background:#eceff1; border-radius:5px 5px 0 0; font-size:15px; }
+.mepre-event-list { border:1px solid #eceff1; border-top:0; }
+.mepre-event-row { display:grid; grid-template-columns:72px 1fr; gap:10px; align-items:center; padding:9px 10px; border-top:1px solid #eee; color:#263238 !important; text-decoration:none !important; background:#fff; }
+.mepre-event-row:first-child { border-top:0; }
+a.mepre-event-row:hover { background:#fafafa; }
+.mepre-time { font-weight:700; font-variant-numeric:tabular-nums; }
+.mepre-event-title { border-left:4px solid #3a87ad; padding-left:10px; }
+.mepre-status-programada .mepre-event-title { border-left-color:#007600; }
+.mepre-empty { padding:22px; background:#fff8e1; border-radius:5px; }
+
+@media print {
+  #mepre-agenda-mejorada-toolbar, #mepre-agenda-mejorada-panel { display:none !important; }
+}
