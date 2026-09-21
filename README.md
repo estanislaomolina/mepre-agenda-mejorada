@@ -32,3 +32,10 @@ El archivo .ics es una exportación, no una sincronización permanente. Si luego
 Privacidad
 ----------
 La extensión sólo tiene permiso para https://www2.jus.gov.ar/mepre/* y no solicita permisos adicionales.
+
+
+VERSIÓN 1.1.0
+- Corrige la agenda vacía en MEPRE.
+- Ya no depende únicamente de clientEvents de FullCalendar: reconstruye fecha y hora a partir del calendario visible.
+- La comunicación entre la página y la extensión usa JSON en el DOM para evitar problemas entre contextos aislados de Chrome.
+- Mantiene impresión sin pop-ups y exportación ICS en horario de Buenos Aires.

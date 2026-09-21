@@ -1,6 +1,8 @@
 (() => {
   'use strict';
 
+  const DATA_ID = 'mepre-agenda-bridge-data';
+
   function cleanText(value) {
     const div = document.createElement('div');
     div.innerHTML = String(value || '').replace(/<br\s*\/?>/gi, ' — ');
@@ -14,9 +16,14 @@
     if (!value) return null;
     try {
       if (typeof value.format === 'function') return value.format('YYYY-MM-DDTHH:mm:ss');
-      if (typeof value.toISOString === 'function') return value.toISOString();
+      if (value instanceof Date) {
+        const p = n => String(n).padStart(2, '0');
+        return `${value.getFullYear()}-${p(value.getMonth()+1)}-${p(value.getDate())}T${p(value.getHours())}:${p(value.getMinutes())}:${p(value.getSeconds())}`;
+      }
       const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+      if (Number.isNaN(d.getTime())) return null;
+      const p = n => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
     } catch (_) {
       return null;
     }
@@ -50,72 +57,31 @@
         allDay: !!ev.allDay,
         url: href,
         backgroundColor: ev.backgroundColor || ev.color || '',
-        textColor: ev.textColor || ''
+        textColor: ev.textColor || '',
+        source: 'fullcalendar'
       };
     }).filter(ev => ev.start);
   }
 
-  function extractFromRenderedElements() {
-    // Respaldo: algunas versiones de FullCalendar guardan el evento original
-    // dentro de los datos jQuery del nodo renderizado.
-    if (!window.jQuery) return [];
-    const $ = window.jQuery;
-    const out = [];
-    $('#calendar .fc-event').each(function(index) {
-      const $el = $(this);
-      let ev = null;
-      const data = $el.data() || {};
-      for (const key of Object.keys(data)) {
-        const candidate = data[key];
-        if (candidate && typeof candidate === 'object') {
-          if (candidate.event && candidate.event.start) ev = candidate.event;
-          else if (candidate.start && (candidate.title || candidate.url)) ev = candidate;
-          if (ev) break;
-        }
-      }
-      if (!ev) return;
-      const href = ev.url || $el.attr('href') || '';
-      const title = cleanText(ev.title || $el.find('.fc-event-title').html() || $el.text());
-      out.push({
-        id: String(ev.id || /[?&]mepre=(\d+)/i.exec(href)?.[1] || index),
-        mepreId: /[?&]mepre=(\d+)/i.exec(href)?.[1] || '',
-        mepreNumber: title.match(/MEPRE\s*N[°º]?\s*(\d+)/i)?.[1] || '',
-        title,
-        start: iso(ev.start),
-        end: iso(ev.end),
-        allDay: !!ev.allDay,
-        url: href,
-        backgroundColor: ev.backgroundColor || ev.color || $el.css('background-color') || '',
-        textColor: ev.textColor || $el.css('color') || ''
-      });
-    });
-    return out.filter(ev => ev.start);
-  }
-
-  function unique(events) {
-    const seen = new Set();
-    return events.filter(ev => {
-      const key = [ev.mepreId || ev.mepreNumber || ev.id, ev.start, ev.title].join('|');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }
-
-  function readCalendar() {
-    let events = extractViaFullCalendar();
-    if (!events.length) events = extractFromRenderedElements();
-    return unique(events).sort((a, b) => String(a.start).localeCompare(String(b.start)));
+  function writePayload(payload) {
+    let node = document.getElementById(DATA_ID);
+    if (!node) {
+      node = document.createElement('script');
+      node.type = 'application/json';
+      node.id = DATA_ID;
+      (document.head || document.documentElement).appendChild(node);
+    }
+    node.textContent = JSON.stringify(payload);
   }
 
   window.addEventListener('mepre-agenda-request', () => {
-    const events = readCalendar();
-    window.dispatchEvent(new CustomEvent('mepre-agenda-response', {
-      detail: {
-        events,
-        title: document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
-        generatedAt: new Date().toISOString()
-      }
-    }));
+    let events = [];
+    try { events = extractViaFullCalendar(); } catch (_) { events = []; }
+    writePayload({
+      events,
+      title: document.querySelector('#calendar .fc-header-title h2')?.textContent?.trim() || 'Agenda MEPRE',
+      generatedAt: new Date().toISOString()
+    });
+    window.dispatchEvent(new CustomEvent('mepre-agenda-response'));
   });
 })();
