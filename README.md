@@ -5,7 +5,7 @@ Qué hace
 --------
 - Agrega una barra arriba del calendario de MEPRE.
 - "Ver lista": muestra la agenda en formato grande y ordenado por día/hora.
-- "Imprimir A4": abre una versión limpia para imprimir, con columna para anotaciones.
+- "Imprimir A4": abre directamente el cuadro de impresión con una versión limpia, sin usar ventanas emergentes, y con columna para anotaciones.
 - "Exportar .ics": descarga los eventos visibles/cargados por MEPRE para importarlos en Google Calendar.
 - Todo funciona localmente en el navegador; la extensión no envía los datos a ningún servidor.
 

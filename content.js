@@ -203,12 +203,51 @@
       return `<section><h2>${escapeHtml(capitalize(formatterDay.format(d)))}</h2><table><thead><tr><th>Hora</th><th>Audiencia</th><th>Anotaciones</th></tr></thead><tbody>${items}</tbody></table></section>`;
     }).join('');
 
-    const w = window.open('', '_blank', 'noopener,noreferrer');
-    if (!w) return alert('Chrome bloqueó la ventana de impresión. Permití ventanas emergentes para MEPRE e intentá de nuevo.');
-    w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Agenda MEPRE</title><style>
-      @page{size:A4;margin:12mm} body{font-family:Arial,sans-serif;color:#111;margin:0} header{border-bottom:2px solid #222;margin-bottom:14px;padding-bottom:8px} h1{font-size:20px;margin:0 0 3px} header p{margin:0;color:#555;font-size:12px} section{break-inside:avoid;margin:0 0 16px} h2{font-size:15px;margin:0 0 5px;background:#eee;padding:6px 8px} table{border-collapse:collapse;width:100%;font-size:12px} th,td{border:1px solid #bbb;padding:7px 8px;text-align:left;vertical-align:top} th{background:#f5f5f5}.time{width:55px;font-weight:bold}.notes{width:32%;height:28px} footer{font-size:9px;color:#777;margin-top:12px}@media print{button{display:none}}
-    </style></head><body><header><h1>Agenda MEPRE</h1><p>${escapeHtml(payload.title || '')}</p></header>${rows}<footer>Generado desde MEPRE Agenda Mejorada · ${new Date().toLocaleString('es-AR')}</footer><script>window.onload=()=>setTimeout(()=>window.print(),150)</script></body></html>`);
-    w.document.close();
+    // Imprimimos dentro de un iframe temporal. Así no dependemos de ventanas
+    // emergentes, que Chrome puede bloquear porque primero esperamos la lectura
+    // asíncrona de los eventos de FullCalendar.
+    const oldFrame = document.getElementById('mepre-agenda-print-frame');
+    if (oldFrame) oldFrame.remove();
+
+    const frame = document.createElement('iframe');
+    frame.id = 'mepre-agenda-print-frame';
+    frame.setAttribute('aria-hidden', 'true');
+    frame.style.position = 'fixed';
+    frame.style.right = '0';
+    frame.style.bottom = '0';
+    frame.style.width = '1px';
+    frame.style.height = '1px';
+    frame.style.border = '0';
+    frame.style.opacity = '0';
+    frame.style.pointerEvents = 'none';
+    document.body.appendChild(frame);
+
+    const w = frame.contentWindow;
+    const doc = frame.contentDocument || w.document;
+    doc.open();
+    doc.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Agenda MEPRE</title><style>
+      @page{size:A4;margin:12mm} body{font-family:Arial,sans-serif;color:#111;margin:0} header{border-bottom:2px solid #222;margin-bottom:14px;padding-bottom:8px} h1{font-size:20px;margin:0 0 3px} header p{margin:0;color:#555;font-size:12px} section{break-inside:avoid;margin:0 0 16px} h2{font-size:15px;margin:0 0 5px;background:#eee;padding:6px 8px} table{border-collapse:collapse;width:100%;font-size:12px} th,td{border:1px solid #bbb;padding:7px 8px;text-align:left;vertical-align:top} th{background:#f5f5f5}.time{width:55px;font-weight:bold}.notes{width:32%;height:28px} footer{font-size:9px;color:#777;margin-top:12px}
+    </style></head><body><header><h1>Agenda MEPRE</h1><p>${escapeHtml(payload.title || '')}</p></header>${rows}<footer>Generado desde MEPRE Agenda Mejorada · ${new Date().toLocaleString('es-AR')}</footer></body></html>`);
+    doc.close();
+
+    const cleanup = () => setTimeout(() => frame.remove(), 500);
+    try {
+      w.onafterprint = cleanup;
+      setTimeout(() => {
+        try {
+          w.focus();
+          w.print();
+          // Respaldo por si el navegador no dispara afterprint.
+          setTimeout(() => { if (frame.isConnected) frame.remove(); }, 60000);
+        } catch (err) {
+          frame.remove();
+          alert('No pude abrir el cuadro de impresión. Probá nuevamente.');
+        }
+      }, 100);
+    } catch (err) {
+      frame.remove();
+      alert('No pude preparar la impresión. Probá nuevamente.');
+    }
   }
 
   function makeButton(text, action, primary=false) {
